@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include "errors.h"
 
 /*
@@ -109,12 +110,34 @@ void *alarm_thread (void *arg)
 
 //____ FUNCTIONS ____
 
+// Function to trim leading and trailing whitespace
+char *trimwhitespace(char *str)
+{
+  char *end;
+
+  // Trim leading space
+  while(isspace((unsigned char)*str)) str++;
+
+  if(*str == 0)  // All spaces?
+    return str;
+
+  // Trim trailing space
+  end = str + strlen(str) - 1;
+  while(end > str && isspace((unsigned char)*end)) end--;
+
+  // Write new null terminator character
+  end[1] = '\0';
+
+  return str;
+}
+
 // Function is called when user enters command for Start_Alarm
 // Creates new alarm based on inputs, and then adds to alarm list
 void Start_Alarm (int alarm_id, char* type, int seconds, const char* message){
     alarm_t *alarm, **last, *next; // pointers for alarms in list
     int status; // for checking mutex status
-
+    printf("Starting Alarm %d\n", alarm_id);
+    
     // Malloc for new alarm 
     // MUST FREE MEMORY ONCE ALARM EXPIRES
     alarm = (alarm_t*)malloc(sizeof(alarm_t));
@@ -122,22 +145,32 @@ void Start_Alarm (int alarm_id, char* type, int seconds, const char* message){
         perror("Allocate Alarm");
         free (alarm);
     }
+    free(alarm);
 }
-void Change_Alarm (int alarm_id, char* type, int seconds, const char* message){}
+void Change_Alarm (int alarm_id, char* type, int seconds, const char* message){
+		printf("Changing alarm %d to %s, %d, %s\n", alarm_id, type, seconds, message);
+	}
 
-void Cancel_Alarm (int alarm_id){}
+void Cancel_Alarm (int alarm_id){
+    printf("Canceling alarm %d\n", alarm_id);
+}
 
-void View_Alarms(){}
+void View_Alarms(){
+    printf("Viewing Alarms\n");
+}
 
 int main (int argc, char *argv[])
 {
     int status;
+    char sline[128];
     char line[128];
     alarm_t *alarm, **last, *next;
     int alarm_id; // ADDED: declare the alarm's unique id
-    char* type; // ADDED: type string. Usually in form 'T2'
+  //  char* type; // ADDED: type string. Usually in form 'T2'
+    char type[65] = "";
     int seconds; // ADDED: time in seconds
-    char* message; // ADDED: message of alarm when expired
+  //  char* message; // ADDED: message of alarm when expired
+    char message[65] = "";
     pthread_t thread;
 
     status = pthread_create (
@@ -146,20 +179,23 @@ int main (int argc, char *argv[])
         err_abort (status, "Create alarm thread");
     while (1) {
         printf ("alarm> ");
-        if (fgets (line, sizeof (line), stdin) == NULL) exit (0);
-        if (strlen (line) <= 1) continue;
+        if (fgets (sline, sizeof (sline), stdin) == NULL) exit (0);
+        if (strlen (sline) <= 1) continue;
         alarm = (alarm_t*)malloc (sizeof (alarm_t));
         if (alarm == NULL)
             errno_abort ("Allocate alarm");
 
         // ADDED: Check command for specific function calls {
         // Start Alarm function call
-        if (sscanf(line, "Start_Alarm(%d): %s %d %64[^\n]", 
-            &alarm_id, type, &seconds, message) == 4){
+        strcpy(line, trimwhitespace(sline));
+        
+            
+        if (sscanf(line, "Start_Alarm(%d): %s %d %s", 
+            &alarm_id, type, &seconds, message) > 3){
                 Start_Alarm(alarm_id, type, seconds, message);
             // Change Alarm function call
-        } else if (sscanf(line, "Change_Alarm(%d): %s %d %64[^\n]", 
-            &alarm_id, type, &seconds, message) == 4){
+        } else if (sscanf(line, "Change_Alarm(%d): %s %d %s", 
+            &alarm_id, type, &seconds, message) > 3){
                 Change_Alarm(alarm_id, type, seconds, message);
             // Cancel Alarm function call
         } else if (sscanf(line, "Cancel_Alarm(%d)", 
@@ -167,7 +203,7 @@ int main (int argc, char *argv[])
                 Cancel_Alarm(alarm_id);
             // View Alarms function call. Uses specifically string compare, not sscanf
             // There are no variables to compare, only exact copy of a string
-        } else if (strcmp(line, "View_Alarms()") == 0){
+        } else if (strcmp(line, "View_Alarms()\n") == 0){
                 View_Alarms();
         // }
         /*
@@ -177,7 +213,8 @@ int main (int argc, char *argv[])
          */
         } else if (sscanf (line, "%d %64[^\n]", 
             &alarm->seconds, alarm->message) < 2) {
-            fprintf (stderr, "Bad command\n");
+            printf("Bad command\n");
+            //fprintf (stderr, "Bad command\n");
             free (alarm);
         } else {
             status = pthread_mutex_lock (&alarm_mutex);
@@ -189,9 +226,11 @@ int main (int argc, char *argv[])
              * Insert the new alarm into the list of alarms,
              * sorted by expiration time.
              */
+             printf("else");
             last = &alarm_list;
             next = *last;
             while (next != NULL) {
+				printf("while");
                 if (next->time >= alarm->time) {
                     alarm->link = next;
                     *last = alarm;
